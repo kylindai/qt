@@ -17,10 +17,8 @@ MYSQL_DB = "miaowadb"
 
 
 BAR_COLUMNS = ['open', 'high', 'low', 'close', 'volume']
-ORDER_COLUMNS = ['price', 'volume', 'direction', 'offset', 'order_type', 'order_source', 'order_status', 
-                 'update_time', 'order_id', 'order_policy']
-TRADE_COLUMNS = ['price', 'volume', 'direction', 'offset', 'trade_type', 'trade_source', 
-                 'cost', 'profit', 'commission', 'order_ref']
+ORDER_COLUMNS = ['insert_time', 'price', 'volume', 'direction', 'offset', 'order_type', 'order_source', 'order_status']
+TRADE_COLUMNS = ['insert_time', 'price', 'volume', 'direction', 'offset', 'trade_type', 'trade_source']
 BAR_TRADE_COLUMNS = ['open', 'high', 'low', 'close', 'volume', 'price', 'direction', 'offset']
 JOIN_BAR_COLUMNS = ['close']
 JOIN_TRADE_COLUMNS = ['price', 'volume', 'direction', 'offset']
@@ -76,15 +74,15 @@ def read_order_from_sql(backtest_id: int, direction: str = None, offset: str = N
     sql = f"SELECT id, broker_id, user_id," \
           f" trading_day, settlement_id, front_id, session_id, request_id," \
           f" CONCAT(insert_date, ' ', insert_time) as ts," \
-          f" insert_date, insert_time, active_time, update_time, cancel_time," \
+          f" insert_date, insert_time, update_time, cancel_time," \
           f" symbol, price, volume, direction, offset," \
-          f" order_id, order_seq, order_ref, order_type, order_source," \
-          f" order_status, order_group, order_stack, order_policy" \
+          f" order_id, order_ref, order_seq," \
+          f" order_type, order_source, order_status" \
           f" FROM T_ORDER" \
           f" WHERE settlement_id = {backtest_id}" \
           f" {direction_cond}" \
           f" {offset_cond}" \
-          f" ORDER BY ts, created"
+          f" ORDER BY ts"
     # print(sql)
     df = pd.read_sql_query(sql, con, index_col='ts')
     df.index = pd.to_datetime(df.index)
@@ -114,11 +112,10 @@ def read_trade_from_sql(backtest_id: int, direction: str = None, offset: str = N
     direction_cond = f" AND direction = '{direction}'" if direction else ""
     offset_cond = f" AND offset = '{offset}'" if offset else ""
     sql = f"SELECT id, broker_id, user_id," \
-          f" trading_day, settlement_id, " \
+          f" trading_day, settlement_id, trade_id, trade_seq," \
           f" CONCAT(trade_date, ' ', trade_time) as ts," \
-          f" trade_date, trade_time, symbol, price, volume," \
-          f" direction, offset, cost, profit, commission," \
-          f" trade_id, trade_seq, trade_type, trade_source, trade_group, trade_stack," \
+          f" trade_date, trade_time, trade_type, trade_source," \
+          f" symbol, price, volume, direction, offset," \
           f" order_ref, order_sys_id" \
           f" FROM T_TRADE" \
           f" WHERE settlement_id = {backtest_id}" \
