@@ -64,8 +64,9 @@ class FactorUtil:
                    batch_size=batch_size)
         # print(sql)
         df = pd.read_sql_query(sql, con, index_col='ts')
-        df.index = pd.to_datetime(df.index)
-        return df
+        if df is not None and len(df.index) > 0:
+            df.index = pd.to_datetime(df.index)
+            return df
 
     @staticmethod
     def read_bar_from_sql(bar_name, 
@@ -99,8 +100,40 @@ class FactorUtil:
                    batch_size=batch_size)
         # print(sql)
         df = pd.read_sql_query(sql, con, index_col='ts')
-        df.index = pd.to_datetime(df.index)
-        return df
+        if df is not None and len(df.index) > 0:
+            df.index = pd.to_datetime(df.index)
+            return df
+
+    @staticmethod
+    def get_bar_start_datetime(bar_name: str,
+                               start_date: str,
+                               start_time: str,
+                               limit: int = 10) -> str:
+        """
+        :param bar_name - FG2401_MIN_1
+        :param start_date - format %Y%m%d
+        :param limit
+        """
+        url = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASS}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DB}"
+        con = sqlalchemy.create_engine(url)
+        
+        table_name = f"Q_BAR_{bar_name}"
+        start_date = FactorUtil.to_iso_date(start_date)
+
+        sql = """
+            SELECT data_ts as ts, date, time
+            FROM {table_name}
+            WHERE data_ts <= '{start_date} {start_time}'
+            AND status = 1
+            ORDER BY data_ts DESC limit {limit}
+        """.format(table_name=table_name,
+                   start_date=start_date,
+                   start_time=start_time,
+                   limit=limit)
+        # print(sql)
+        df = pd.read_sql_query(sql, con, index_col='ts')
+        if df is not None and len(df.index) > 0:
+            return df['date'].iloc[-1], df['time'].iloc[-1], len(df.index)
 
     @staticmethod
     def get_bar_df(bar_name,
@@ -117,8 +150,9 @@ class FactorUtil:
                                               start_date,
                                               start_time,
                                               batch_size)
-        bar_df.rename(columns=BAR_COLUMN_DICT, inplace=True)
-        return bar_df[BAR_COLUMN_LIST]
+        if bar_df is not None:
+            bar_df.rename(columns=BAR_COLUMN_DICT, inplace=True)
+            return bar_df[BAR_COLUMN_LIST]
     
     @staticmethod
     def concat_shift_df(df, periods, columns) -> pd.DataFrame:
@@ -135,13 +169,29 @@ class FactorUtil:
                           start_time='00:00:00',
                           batch_size=10000,
                           window_period=10) -> pd.DataFrame:
-        # get bar df
-        bar_df = FactorUtil.get_bar_df(bar_name,
-                                       start_date,
-                                       start_time,
-                                       batch_size)
-        for i in range(1, window_period):
-            bar_df = FactorUtil.concat_shift_df(bar_df, i, BAR_COLUMN_LIST)
-        return bar_df
+        """
+        :param bar_name - FG2401_MIN_1
+        :param start_date - format %Y%m%d
+        :param start_time - format %H:%i:%s
+        :param batch_size
+        :param window_period
+        """
+        # get bar start_date and start_time
+        start_date, start_time, offset = FactorUtil.get_bar_start_datetime(bar_name,
+                                                                           start_date,
+                                                                           start_time,
+                                                                           window_period)
+        print(start_date, start_time)
+        if start_date and start_time:
+            # get bar df
+            bar_df = FactorUtil.get_bar_df(bar_name,
+                                           start_date,
+                                           start_time,
+                                           batch_size + window_period)
+            if bar_df is not None:
+                for i in range(1, window_period):
+                    bar_df = FactorUtil.concat_shift_df(
+                        bar_df, i, BAR_COLUMN_LIST)
+                return bar_df.iloc[offset:]
         
                
